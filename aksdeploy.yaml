@@ -1,0 +1,131 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: vote-storage
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vote-storage
+    spec:
+      nodeSelector:
+        "beta.kubernetes.io/os": linux
+      containers:
+      - name: vote-storage
+        image: redis:4.0.11
+        ports:
+        - containerPort: 6379
+          name: vote-storage # this might need to be "redis"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vote-storage
+spec:
+  ports:
+  - port: 6379
+  selector:
+    app: vote-storage
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: vote-analytics
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vote-analytics
+    spec:
+      nodeSelector:
+        "beta.kubernetes.io/os": linux
+      containers:
+      - name: vote-analytics
+        image: clmvoteacr.azurecr.io/azure-vote-analytics:v1
+        ports:
+        - containerPort: 8080
+          name: vote-analytics 
+        env:
+        - name: PORT
+          value: "8080"
+        - name: VOTE1VALUE
+          value: "Cats"
+        - name: VOTE2VALUE
+          value: "Dogs"
+        - name: REDIS_HOST
+          value: "vote-storage"
+        - name: REDIS_PORT
+          value: "6379"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vote-analytics
+spec:
+  ports:
+  - port: 8080
+  selector:
+    app: vote-analytics
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: azure-vote-front
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  minReadySeconds: 5 
+  template:
+    metadata:
+      labels:
+        app: azure-vote-front
+    spec:
+      nodeSelector:
+        "beta.kubernetes.io/os": linux
+      containers:
+      - name: azure-vote-front
+        image: clmvoteacr.azurecr.io/azure-vote-front:v1
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 250m
+          limits:
+            cpu: 500m
+        env:
+        - name: PORT
+          value: "80"
+        - name: TITLE
+          value: "AKS Voting App"
+        - name: VOTE1VALUE
+          value: "Cats"
+        - name: VOTE2VALUE
+          value: "Dogs"
+        - name: SHOWDETAILS
+          value: "false"
+        - name: FEATUREFLAG
+          value: "false"
+        - name: REDIS_HOST
+          value: "vote-storage"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: ANALYTICS_HOST
+          value: "vote-analytics"
+        - name: ANALYTICS_PORT
+          value: "8080"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: azure-vote-front
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+  selector:
+    app: azure-vote-front
